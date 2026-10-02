@@ -59,8 +59,18 @@ def test_layer_norm_population_variance_and_affine_gradients(shape, affine):
 
     torch.testing.assert_close(actual, expected, rtol=1e-10, atol=1e-10)
     torch.testing.assert_close(x.grad, ref_x.grad, rtol=1e-8, atol=1e-9)
+    if shape.numel() == 1:
+        # A singleton feature has exactly zero centered value and variance.
+        # Some native kernels leave a tiny cancellation residual for d(gain).
+        assert torch.count_nonzero(x.grad) == 0
+        if affine:
+            torch.testing.assert_close(actual, layer.bias.expand_as(actual), rtol=0, atol=0)
+            assert torch.count_nonzero(layer.gain.grad) == 0
+        else:
+            assert torch.count_nonzero(actual) == 0
     if affine:
-        torch.testing.assert_close(layer.gain.grad, gain.grad, rtol=1e-10, atol=1e-10)
+        gain_atol = 1e-9 if shape.numel() == 1 else 1e-10
+        torch.testing.assert_close(layer.gain.grad, gain.grad, rtol=1e-10, atol=gain_atol)
         torch.testing.assert_close(layer.bias.grad, bias.grad, rtol=1e-10, atol=1e-10)
 
 
